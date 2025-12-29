@@ -132,62 +132,65 @@ function AppContent() {
   const progress = state === 'CHALLENGE' ? 50 : state === 'SUCCESS' ? 100 : 0
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="container mx-auto px-4 py-6 max-w-md">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-[#0D0D12] to-black text-white">
+      <div className="mx-auto p-8 max-w-md">
         {/* START State */}
         {state === 'START' && (
-          <div className="flex flex-col space-y-8">
+          <div className="flex flex-col gap-6">
             {/* Icon */}
-            <div className="flex justify-center pt-8">
-              <div className="w-20 h-20 bg-purple-600 rounded-lg flex items-center justify-center">
+            <div className="flex justify-center pt-2">
+              <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg border border-indigo-500/20">
                 <GraduationCap className="w-12 h-12 text-white" />
               </div>
             </div>
             
             {/* Title */}
             <div className="text-center space-y-2">
-              <h1 className="text-4xl font-bold text-white">SKÜL</h1>
-              <p className="text-white/70 text-sm">Proof-of-Skill v1.0</p>
+              <h1 className="text-4xl font-bold tracking-wide text-white">SKÜL</h1>
+              <p className="text-indigo-200 text-sm">Proof-of-Skill v1.0</p>
             </div>
 
             {/* Active Challenge Box */}
-            <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-              <p className="text-xs text-white/60 uppercase tracking-wide mb-2">ACTIVE CHALLENGE</p>
-              <p className="text-white text-lg font-medium">{currentChallenge.title}</p>
+            <div className="bg-gray-900/50 backdrop-blur-sm rounded-3xl p-5 border border-indigo-500/20">
+              <p className="text-xs text-indigo-200 uppercase tracking-wide mb-2">ACTIVE CHALLENGE</p>
+              <p className="text-white text-lg font-bold">{currentChallenge.title}</p>
             </div>
 
-            {/* Start Button */}
-            <button
-              onClick={handleStartChallenge}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              Start Challenge <ArrowRight className="w-5 h-5" />
-            </button>
-
-            {/* Privy Connection */}
-            {!authenticated && (
+            {/* Buttons with spacing */}
+            <div className="space-y-4">
+              {/* Start Button */}
+              <button
+                onClick={handleStartChallenge}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+              >
+                Start Challenge <ArrowRight className="w-5 h-5" />
+              </button>
+              
+              {/* Privy Connection */}
+              {!authenticated && (
               <button
                 onClick={handleConnectPrivy}
-                className="w-full bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-200 font-medium py-3 px-6 rounded-xl transition-all duration-200"
+                  className="w-full bg-gray-900/50 hover:bg-gray-800/50 border border-indigo-500/20 text-indigo-200 font-medium py-3 px-6 rounded-full transition-all duration-200 backdrop-blur-sm"
               >
-                Connect Wallet
+                  Connect Wallet
               </button>
-            )}
+              )}
+            </div>
           </div>
         )}
 
         {/* CHALLENGE State */}
         {state === 'CHALLENGE' && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             {/* Progress Bars */}
-            <div className="space-y-2">
-              <div className="w-full bg-gray-800 rounded-full h-2">
+            <div className="space-y-2 pt-2">
+              <div className="w-full bg-gray-800/50 rounded-full h-2 backdrop-blur-sm border border-indigo-500/20">
                 <div 
-                  className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="w-full bg-gray-800 rounded-full h-1">
+              <div className="w-full bg-gray-800/50 rounded-full h-1 backdrop-blur-sm border border-indigo-500/20">
                 <div 
                   className="bg-gray-600 h-1 rounded-full"
                   style={{ width: `${100 - progress}%` }}
@@ -196,96 +199,101 @@ function AppContent() {
             </div>
 
             {/* Title */}
-            <h2 className="text-3xl font-bold text-white">The Challenge</h2>
+            <h2 className="text-3xl font-bold tracking-wide text-white">The Challenge</h2>
 
             {/* Instructions */}
-            <p className="text-white/80 text-sm leading-relaxed">
+            <p className="text-indigo-200 text-sm leading-relaxed">
               {currentChallenge.instructions}
             </p>
 
             {/* Prompt in Speech Bubble */}
-            <div className="bg-purple-600 rounded-2xl p-4 relative">
-              <div className="absolute -bottom-2 left-6 w-4 h-4 bg-purple-600 rotate-45"></div>
-              <p className="text-white text-base leading-relaxed">"{currentChallenge.prompt}"</p>
-            </div>
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-5 relative shadow-lg border border-indigo-500/20">
+              <div className="absolute -bottom-2 left-6 w-4 h-4 bg-gradient-to-r from-indigo-600 to-purple-600 rotate-45"></div>
+              <p className="text-white text-base leading-relaxed font-medium">"{currentChallenge.prompt}"</p>
+              </div>
 
             {/* Text Area */}
-            <textarea
-              value={userAnswer}
-              onChange={(e) => setUserAnswer(e.target.value)}
+                <textarea
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
               placeholder={currentChallenge.placeholder}
-              className="w-full bg-gray-900 border border-gray-800 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none min-h-[200px] text-base"
+              className="w-full bg-gray-900/50 backdrop-blur-sm border border-indigo-500/20 rounded-3xl p-5 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 resize-none min-h-[200px] text-base"
             />
 
             {/* Validation Feedback */}
             {validationResult && !validationResult.passed && (
-              <div className="bg-red-900/20 border border-red-800 rounded-xl p-4">
+              <div className="bg-red-900/20 border border-red-800/50 rounded-3xl p-4 backdrop-blur-sm">
                 <p className="text-red-300 text-sm">{validationResult.feedback}</p>
                 <p className="text-red-400/70 text-xs mt-2">Score: {validationResult.score}/100</p>
               </div>
             )}
 
             {/* Submit Button */}
-            <button
-              onClick={handleSubmitChallenge}
-              disabled={userAnswer.trim().length === 0 || isMinting}
-              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-800 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200"
-            >
-              {isMinting ? 'Minting Badge...' : 'Submit for Certification'}
-            </button>
+            <div className="pt-2">
+              <button
+                onClick={handleSubmitChallenge}
+                disabled={userAnswer.trim().length === 0 || isMinting}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-800 disabled:to-gray-800 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 shadow-lg"
+              >
+                {isMinting ? 'Minting Badge...' : 'Submit for Certification'}
+              </button>
+            </div>
           </div>
         )}
 
         {/* SUCCESS State */}
         {state === 'SUCCESS' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-6 pt-6">
             {/* Green Checkmark */}
-            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center">
+            <div className="w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg border border-indigo-500/20">
               <Check className="w-16 h-16 text-white" />
             </div>
 
             {/* Title */}
-            <h2 className="text-3xl font-bold text-white">Skill Certified!</h2>
+            <h2 className="text-3xl font-bold tracking-wide text-white">Skill Certified!</h2>
 
             {/* Confirmation Message */}
-            <p className="text-white/80 text-base">
+            <p className="text-indigo-200 text-base px-2">
               {farcasterContext.username ? `@${farcasterContext.username}` : 'You'}, your {currentChallenge.category} proficiency is now recorded onchain.
             </p>
 
             {/* Onchain Identity Box */}
-            <div className="w-full bg-gray-900 rounded-xl p-5 border border-gray-800 space-y-3">
-              <p className="text-xs text-white/60 uppercase tracking-wide text-left">ONCHAIN IDENTITY</p>
+            <div className="w-full bg-gray-900/50 backdrop-blur-sm rounded-3xl p-5 border border-indigo-500/20 space-y-3">
+              <p className="text-xs text-indigo-200 uppercase tracking-wide text-left font-bold">ONCHAIN IDENTITY</p>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <p className="text-white text-lg font-medium">
+                  <p className="text-white text-lg font-bold">
                     FID: {farcasterContext.fid || 'N/A'}
                   </p>
-                  <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center border border-indigo-500/20">
                     <Shield className="w-4 h-4 text-white" />
                   </div>
                 </div>
               </div>
-              <p className="text-white/70 text-sm text-left">
+              <p className="text-indigo-200 text-sm text-left">
                 Credential #{credentialNumber}
               </p>
             </div>
 
-            {/* Share Button */}
-            <button
-              onClick={handleShareToFarcaster}
-              className="w-full bg-white hover:bg-gray-100 text-black font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <Share2 className="w-5 h-5" />
-              Share to Farcaster
-            </button>
+            {/* Buttons with spacing */}
+            <div className="w-full space-y-4">
+              {/* Share Button */}
+              <button
+                onClick={handleShareToFarcaster}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Share2 className="w-5 h-5" />
+                Share to Farcaster
+              </button>
 
-            {/* Try Another Button */}
+              {/* Try Another Button */}
             <button
               onClick={handleReset}
-              className="w-full bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-200 font-medium py-3 px-6 rounded-xl transition-all duration-200"
+                className="w-full bg-gray-900/50 hover:bg-gray-800/50 border border-indigo-500/20 text-indigo-200 font-medium py-3 px-6 rounded-full transition-all duration-200 backdrop-blur-sm"
             >
               Try Another Challenge
             </button>
+            </div>
           </div>
         )}
       </div>
@@ -299,6 +307,13 @@ function App() {
   if (!privyAppId) {
     console.error('VITE_PRIVY_APP_ID is not set. Please create a .env file with your Privy App ID.')
   }
+
+  // Tell Farcaster the app is ready to be displayed
+  useEffect(() => {
+    sdk.actions.ready().catch((error) => {
+      console.error('Failed to call sdk.actions.ready():', error)
+    })
+  }, [])
 
   return (
     <PrivyProvider
