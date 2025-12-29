@@ -294,9 +294,15 @@ function AppContent() {
 }
 
 function App() {
+  const privyAppId = import.meta.env.VITE_PRIVY_APP_ID
+  
+  if (!privyAppId) {
+    console.error('VITE_PRIVY_APP_ID is not set. Please create a .env file with your Privy App ID.')
+  }
+
   return (
     <PrivyProvider
-      appId={import.meta.env.VITE_PRIVY_APP_ID || 'cmjrr4ugk0116l50cqunuaenr'}
+      appId={privyAppId || ''}
       config={{
         loginMethods: ['wallet', 'email', 'sms'],
         appearance: {
