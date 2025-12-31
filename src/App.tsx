@@ -1,27 +1,54 @@
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import sdk from '@farcaster/miniapp-sdk'
-import { PrivyProvider, usePrivy } from '@privy-io/react-auth'
-import { GraduationCap, Check, Shield, ArrowRight, Share2 } from 'lucide-react'
+import { PrivyProvider, usePrivy, useWallets } from '@privy-io/react-auth'
+import { GraduationCap, Check, Shield, Share2, Sparkles } from 'lucide-react'
 import { CHALLENGES, getRandomChallenge, type Challenge } from './utils/challenges'
 import { validateAnswer, validatePresentation, validateNegotiation } from './utils/validation'
-import { mintBadge, generateCredentialNumber, type BadgeMetadata } from './utils/badge'
+import { mintBadge, generateCredentialNumber, type BadgeMetadata, SONEIUM_MINATO } from './utils/badge'
 
-type AppState = 'START' | 'CHALLENGE' | 'SUCCESS'
+// Logo image path - place your logo in public folder as skul-logo.png
+// Or update this path to match your image location
+const skulLogo = '/skul-logo.png'
+
+type AppState = 'SPLASH' | 'START' | 'CHALLENGE' | 'SUCCESS'
 
 interface FarcasterContext {
   fid?: number
   username?: string
 }
 
+interface MintResult {
+  success: boolean
+  txHash?: string
+  error?: string
+}
+
 function AppContent() {
-  const [state, setState] = useState<AppState>('START')
+  const [state, setState] = useState<AppState>('SPLASH')
   const [userAnswer, setUserAnswer] = useState('')
   const [farcasterContext, setFarcasterContext] = useState<FarcasterContext>({})
   const [currentChallenge, setCurrentChallenge] = useState<Challenge>(CHALLENGES[0])
   const [credentialNumber, setCredentialNumber] = useState<string>('')
   const [validationResult, setValidationResult] = useState<{ score: number; passed: boolean; feedback: string } | null>(null)
   const [isMinting, setIsMinting] = useState(false)
+  const [mintError, setMintError] = useState<string | null>(null)
+  const [mintResult, setMintResult] = useState<MintResult | null>(null)
   const { ready, authenticated, login } = usePrivy()
+  const { wallets } = useWallets()
+  
+  // Get the contract address from environment or use a placeholder
+  const CONTRACT_ADDRESS = (import.meta.env.VITE_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
+
+  // Splash screen - show for 2 seconds
+  useEffect(() => {
+    if (state === 'SPLASH') {
+      const timer = setTimeout(() => {
+        setState('START')
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [state])
 
   useEffect(() => {
     // Initialize Farcaster Mini App SDK
@@ -50,7 +77,6 @@ function AppContent() {
     setState('CHALLENGE')
     setUserAnswer('')
     setValidationResult(null)
-    // Randomly select a challenge
     const randomChallenge = getRandomChallenge()
     setCurrentChallenge(randomChallenge)
   }
@@ -59,45 +85,69 @@ function AppContent() {
     if (userAnswer.trim().length === 0) return
     
     // Validate the answer based on challenge type
-    let result
+    let validationResult
     if (currentChallenge.id.includes('presentation')) {
-      result = validatePresentation(userAnswer)
+      validationResult = validatePresentation(userAnswer)
     } else if (currentChallenge.id.includes('negotiation')) {
-      result = validateNegotiation(userAnswer)
+      validationResult = validateNegotiation(userAnswer)
     } else {
-      result = validateAnswer(userAnswer, currentChallenge.prompt, 'email')
+      validationResult = validateAnswer(userAnswer, currentChallenge.prompt, 'email')
     }
     
-    setValidationResult(result)
+    setValidationResult(validationResult)
     
-    if (result.passed) {
+    if (validationResult.passed) {
       // Generate credential number
       const credNum = generateCredentialNumber()
       setCredentialNumber(credNum)
       
       // Mint onchain badge
-      if (farcasterContext.fid) {
+      if (farcasterContext.fid && authenticated) {
         setIsMinting(true)
+        setMintError(null)
+        setMintResult(null)
+        
         try {
+          // Get the Ethereum wallet from Privy
+          const wallet = wallets.find(w => w.walletClientType === 'privy')
+          if (!wallet) {
+            throw new Error('No Privy wallet found. Please connect your wallet.')
+          }
+
+          // Get the Ethereum provider
+          const ethereumProvider = await wallet.getEthereumProvider()
+          if (!ethereumProvider) {
+            throw new Error('Failed to get Ethereum provider from wallet.')
+          }
+
           const badgeMetadata: BadgeMetadata = {
             fid: farcasterContext.fid,
             challengeId: currentChallenge.id,
             credentialNumber: credNum,
             category: currentChallenge.category,
             timestamp: Date.now(),
-            score: result.score,
+            score: validationResult.score,
           }
           
-          const mintResult = await mintBadge(badgeMetadata)
-          if (!mintResult.success) {
-            console.error('Failed to mint badge:', mintResult.error)
-            // Continue anyway - user still gets certified
+          const mintBadgeResult = await mintBadge(badgeMetadata, ethereumProvider, CONTRACT_ADDRESS)
+          setMintResult(mintBadgeResult)
+          
+          if (!mintBadgeResult.success) {
+            setMintError(mintBadgeResult.error || 'Failed to mint badge onchain')
+            console.error('Failed to mint badge:', mintBadgeResult.error)
+          } else {
+            console.log('Badge minted successfully! TX:', mintBadgeResult.txHash)
           }
-        } catch (error) {
+        } catch (error: any) {
+          const errorMessage = error?.message || 'Failed to mint badge onchain'
+          setMintError(errorMessage)
+          setMintResult({ success: false, error: errorMessage })
           console.error('Error minting badge:', error)
         } finally {
           setIsMinting(false)
         }
+      } else if (!authenticated) {
+        setMintError('Connect wallet to mint onchain credential')
       }
       
       setState('SUCCESS')
@@ -116,6 +166,8 @@ function AppContent() {
     setUserAnswer('')
     setValidationResult(null)
     setCredentialNumber('')
+    setMintError(null)
+    setMintResult(null)
   }
 
   const handleShareToFarcaster = async () => {
@@ -129,174 +181,259 @@ function AppContent() {
     }
   }
 
-  const progress = state === 'CHALLENGE' ? 50 : state === 'SUCCESS' ? 100 : 0
-
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-[#0D0D12] to-black text-white">
-      <div className="mx-auto p-8 max-w-md">
-        {/* START State */}
-        {state === 'START' && (
-          <div className="flex flex-col gap-6">
-            {/* Icon */}
-            <div className="flex justify-center pt-2">
-              <div className="w-20 h-20 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg border border-indigo-500/20">
-                <GraduationCap className="w-12 h-12 text-white" />
-              </div>
-            </div>
-            
-            {/* Title */}
-            <div className="text-center space-y-2">
-              <h1 className="text-4xl font-bold tracking-wide text-white">SKÜL</h1>
-              <p className="text-indigo-200 text-sm">Proof-of-Skill v1.0</p>
-            </div>
-
-            {/* Active Challenge Box */}
-            <div className="bg-gray-900/50 backdrop-blur-sm rounded-3xl p-5 border border-indigo-500/20">
-              <p className="text-xs text-indigo-200 uppercase tracking-wide mb-2">ACTIVE CHALLENGE</p>
-              <p className="text-white text-lg font-bold">{currentChallenge.title}</p>
-            </div>
-
-            {/* Buttons with spacing */}
-            <div className="space-y-4">
-              {/* Start Button */}
-              <button
-                onClick={handleStartChallenge}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
+    <div className="min-h-screen bg-[#0A0A0B] text-white overflow-x-hidden">
+      <AnimatePresence mode="wait">
+        {/* SPLASH Screen */}
+        {state === 'SPLASH' && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="fixed inset-0 bg-[#0A0A0B] z-50 flex items-center justify-center"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          >
+            <motion.div
+              className="flex flex-col items-center justify-center gap-4"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            >
+              <motion.div
+                className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] flex items-center justify-center shadow-[0_0_40px_rgba(99,102,241,0.4)]"
+                animate={{
+                  scale: [1, 1.05, 1],
+                  opacity: [1, 0.9, 1],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
               >
-                Start Challenge <ArrowRight className="w-5 h-5" />
-              </button>
+                <GraduationCap className="w-14 h-14 text-white" />
+              </motion.div>
+              <motion.img
+                src={skulLogo}
+                alt="SKÜL"
+                className="h-16 w-auto"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2, duration: 0.5 }}
+                onError={(e) => {
+                  // Fallback to text if image fails to load
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                  const textFallback = document.createElement('h1')
+                  textFallback.textContent = 'SKÜL'
+                  textFallback.className = 'text-5xl font-bold tracking-tight text-white'
+                  target.parentNode?.appendChild(textFallback)
+                }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Main Content */}
+        {state !== 'SPLASH' && (
+          <div className="min-h-screen bg-[#0A0A0B] flex flex-col items-center justify-center p-6 sm:p-8">
+            {/* The Mobile Frame: This is what stops the side-to-side stretching */}
+            <div className="w-full max-w-[400px] flex flex-col gap-8">
               
-              {/* Privy Connection */}
-              {!authenticated && (
-              <button
-                onClick={handleConnectPrivy}
-                  className="w-full bg-gray-900/50 hover:bg-gray-800/50 border border-indigo-500/20 text-indigo-200 font-medium py-3 px-6 rounded-full transition-all duration-200 backdrop-blur-sm"
-              >
-                  Connect Wallet
-              </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* CHALLENGE State */}
-        {state === 'CHALLENGE' && (
-          <div className="flex flex-col gap-6">
-            {/* Progress Bars */}
-            <div className="space-y-2 pt-2">
-              <div className="w-full bg-gray-800/50 rounded-full h-2 backdrop-blur-sm border border-indigo-500/20">
-                <div 
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <div className="w-full bg-gray-800/50 rounded-full h-1 backdrop-blur-sm border border-indigo-500/20">
-                <div 
-                  className="bg-gray-600 h-1 rounded-full"
-                  style={{ width: `${100 - progress}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Title */}
-            <h2 className="text-3xl font-bold tracking-wide text-white">The Challenge</h2>
-
-            {/* Instructions */}
-            <p className="text-indigo-200 text-sm leading-relaxed">
-              {currentChallenge.instructions}
-            </p>
-
-            {/* Prompt in Speech Bubble */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-5 relative shadow-lg border border-indigo-500/20">
-              <div className="absolute -bottom-2 left-6 w-4 h-4 bg-gradient-to-r from-indigo-600 to-purple-600 rotate-45"></div>
-              <p className="text-white text-base leading-relaxed font-medium">"{currentChallenge.prompt}"</p>
-              </div>
-
-            {/* Text Area */}
-                <textarea
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-              placeholder={currentChallenge.placeholder}
-              className="w-full bg-gray-900/50 backdrop-blur-sm border border-indigo-500/20 rounded-3xl p-5 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 resize-none min-h-[200px] text-base"
-            />
-
-            {/* Validation Feedback */}
-            {validationResult && !validationResult.passed && (
-              <div className="bg-red-900/20 border border-red-800/50 rounded-3xl p-4 backdrop-blur-sm">
-                <p className="text-red-300 text-sm">{validationResult.feedback}</p>
-                <p className="text-red-400/70 text-xs mt-2">Score: {validationResult.score}/100</p>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <div className="pt-2">
-              <button
-                onClick={handleSubmitChallenge}
-                disabled={userAnswer.trim().length === 0 || isMinting}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-800 disabled:to-gray-800 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 shadow-lg"
-              >
-                {isMinting ? 'Minting Badge...' : 'Submit for Certification'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* SUCCESS State */}
-        {state === 'SUCCESS' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-6 pt-6">
-            {/* Green Checkmark */}
-            <div className="w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg border border-indigo-500/20">
-              <Check className="w-16 h-16 text-white" />
-            </div>
-
-            {/* Title */}
-            <h2 className="text-3xl font-bold tracking-wide text-white">Skill Certified!</h2>
-
-            {/* Confirmation Message */}
-            <p className="text-indigo-200 text-base px-2">
-              {farcasterContext.username ? `@${farcasterContext.username}` : 'You'}, your {currentChallenge.category} proficiency is now recorded onchain.
-            </p>
-
-            {/* Onchain Identity Box */}
-            <div className="w-full bg-gray-900/50 backdrop-blur-sm rounded-3xl p-5 border border-indigo-500/20 space-y-3">
-              <p className="text-xs text-indigo-200 uppercase tracking-wide text-left font-bold">ONCHAIN IDENTITY</p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <p className="text-white text-lg font-bold">
-                    FID: {farcasterContext.fid || 'N/A'}
-                  </p>
-                  <div className="w-6 h-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full flex items-center justify-center border border-indigo-500/20">
-                    <Shield className="w-4 h-4 text-white" />
+              {/* START STATE: Wrapped in your new .glass class */}
+              {state === 'START' && (
+                <div className="glass rounded-[2.5rem] p-10 flex flex-col items-center text-center fade-in">
+                  <div className="breathing mb-8 pt-[50px]">
+                    <GraduationCap size={80} className="text-indigo-500" />
+                  </div>
+                  <div className="mb-2">
+                    <img 
+                      src={skulLogo} 
+                      alt="SKÜL" 
+                      className="h-16 w-auto" 
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
+                        const parent = target.parentElement
+                        if (parent && !parent.querySelector('h1')) {
+                          const textFallback = document.createElement('h1')
+                          textFallback.textContent = 'SKÜL'
+                          textFallback.className = 'text-5xl font-black italic tracking-tighter'
+                          parent.appendChild(textFallback)
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className="text-zinc-500 text-xs font-bold tracking-[0.3em] uppercase mb-10">Proof-of-Skill v1.0</p>
+                  
+                  {/* Active Challenge Box */}
+                  <div className="w-full mb-8 p-5 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl">
+                    <p className="text-xs text-zinc-400 uppercase tracking-wide mb-2 font-bold">ACTIVE CHALLENGE</p>
+                    <p className="text-white text-lg font-bold tracking-tight">{currentChallenge.title}</p>
+                  </div>
+                  
+                  <div className="w-full glass rounded-b-[2.5rem] px-[10px] pt-[20px] pb-[30px]">
+                    <button 
+                      onClick={handleStartChallenge} 
+                      className="w-full py-8 px-6 bg-white text-black rounded-full font-bold text-4xl button-glow active:scale-95 transition-all mb-[1.125rem]"
+                      style={{ fontSize: '2rem', minHeight: '80px' }}
+                    >
+                      Start Challenge →
+                    </button>
+                    
+                    {/* Privy Connection */}
+                    {!authenticated && (
+                      <button
+                        onClick={handleConnectPrivy}
+                        className="w-full py-8 px-6 bg-white/5 backdrop-blur-xl border border-white/10 text-zinc-400 font-medium text-4xl rounded-full transition-all active:scale-95"
+                        style={{ fontSize: '2rem', minHeight: '80px' }}
+                      >
+                        Connect Wallet
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-              <p className="text-indigo-200 text-sm text-left">
-                Credential #{credentialNumber}
-              </p>
-            </div>
+              )}
 
-            {/* Buttons with spacing */}
-            <div className="w-full space-y-4">
-              {/* Share Button */}
-              <button
-                onClick={handleShareToFarcaster}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-4 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-2 shadow-lg"
-              >
-                <Share2 className="w-5 h-5" />
-                Share to Farcaster
-              </button>
+              {/* CHALLENGE STATE: Using your .notebook-input class */}
+              {state === 'CHALLENGE' && (
+                <div className="glass rounded-[2.5rem] p-8 fade-in space-y-6">
+                  <h2 className="text-2xl font-bold tracking-tight">The Challenge</h2>
+                  
+                  {/* Instructions */}
+                  <p className="text-zinc-400 text-sm leading-relaxed">
+                    {currentChallenge.instructions}
+                  </p>
+                  
+                  <div className="p-5 bg-indigo-500/10 border-l-4 border-indigo-500 rounded-r-2xl italic">
+                    "{currentChallenge.prompt}"
+                  </div>
+                  
+                  <textarea 
+                    className="notebook-input w-full h-40 rounded-2xl p-4 text-white text-lg resize-none"
+                    placeholder={currentChallenge.placeholder}
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                  />
 
-              {/* Try Another Button */}
-            <button
-              onClick={handleReset}
-                className="w-full bg-gray-900/50 hover:bg-gray-800/50 border border-indigo-500/20 text-indigo-200 font-medium py-3 px-6 rounded-full transition-all duration-200 backdrop-blur-sm"
-            >
-              Try Another Challenge
-            </button>
+                  {/* Validation Feedback */}
+                  {validationResult && !validationResult.passed && (
+                    <div className="bg-red-900/20 border border-red-800/50 rounded-2xl p-4">
+                      <p className="text-red-300 text-sm">{validationResult.feedback}</p>
+                      <p className="text-red-400/70 text-xs mt-2">Score: {validationResult.score}/100</p>
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={handleSubmitChallenge}
+                    disabled={userAnswer.trim().length === 0 || isMinting}
+                    className="w-full py-4 bg-indigo-600 rounded-full font-bold button-glow active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isMinting ? 'Minting Badge...' : 'Seal on Soneium'}
+                  </button>
+                </div>
+              )}
+
+              {/* SUCCESS STATE */}
+              {state === 'SUCCESS' && (
+                <div className="glass rounded-[2.5rem] p-8 fade-in space-y-6">
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    {/* Green Checkmark */}
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                      className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)]"
+                    >
+                      <Check className="w-12 h-12 text-white" />
+                    </motion.div>
+
+                    <h2 className="text-3xl font-bold tracking-tight">Skill Certified!</h2>
+
+                    <p className="text-zinc-400 text-base leading-relaxed">
+                      {farcasterContext.username ? `@${farcasterContext.username}` : 'You'}, your {currentChallenge.category} proficiency is now recorded{authenticated ? ' onchain' : ''}.
+                    </p>
+
+                    {/* Mint Error Display */}
+                    {mintError && (
+                      <div className="w-full bg-yellow-900/20 border border-yellow-800/50 rounded-2xl p-4">
+                        <p className="text-yellow-300 text-sm">{mintError}</p>
+                      </div>
+                    )}
+
+                    {/* Digital Certificate Card */}
+                    <div className="w-full certificate-card metallic-shine rounded-2xl p-6 space-y-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-indigo-400" />
+                          <p className="text-xs text-zinc-400 uppercase tracking-wide font-bold">DIGITAL CERTIFICATE</p>
+                        </div>
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center border border-white/20">
+                          <Shield className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-zinc-400 uppercase tracking-wide mb-1">Farcaster ID</p>
+                          <p className="text-white text-xl font-bold tracking-tight">
+                            {farcasterContext.fid || 'N/A'}
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <p className="text-xs text-zinc-400 uppercase tracking-wide mb-1">Credential Number</p>
+                          <p className="text-zinc-300 text-sm font-mono">
+                            #{credentialNumber}
+                          </p>
+                        </div>
+
+                        {mintResult?.txHash && (
+                          <div className="pt-2 border-t border-white/10">
+                            <p className="text-xs text-zinc-400 uppercase tracking-wide mb-1">Transaction Hash</p>
+                            <a
+                              href={`${SONEIUM_MINATO.blockExplorers.default.url}/tx/${mintResult.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-400 text-xs font-mono hover:text-indigo-300 break-all"
+                            >
+                              {mintResult.txHash.slice(0, 10)}...{mintResult.txHash.slice(-8)}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="w-full space-y-4">
+                      <button
+                        onClick={handleShareToFarcaster}
+                        className="w-full py-4 bg-indigo-600 rounded-full font-bold button-glow active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Share2 className="w-5 h-5" />
+                        Share to Farcaster
+                      </button>
+
+                      <button
+                        onClick={handleReset}
+                        className="w-full py-3 bg-white/5 backdrop-blur-xl border border-white/10 text-zinc-400 font-medium rounded-full transition-all active:scale-95"
+                      >
+                        Try Another Challenge
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
+            
+            <p className="mt-12 text-[10px] font-black text-zinc-700 tracking-[0.4em] uppercase">
+              Secured by Soneium Minato
+            </p>
           </div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   )
 }
@@ -324,6 +461,8 @@ function App() {
           theme: 'dark',
           accentColor: '#9333ea',
         },
+        defaultChain: SONEIUM_MINATO,
+        supportedChains: [SONEIUM_MINATO],
       }}
     >
       <AppContent />
@@ -332,4 +471,3 @@ function App() {
 }
 
 export default App
-
